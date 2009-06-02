@@ -1,0 +1,68 @@
+#!/bin/sh
+
+# --- Variables --- #
+
+  #
+  # Directory or a symbolic link to a directory to play *.mp3 files from.
+  # Files are searched recursively, i.e., files from sub-, sub-sub-, etc.
+  # directories will be included.
+  #
+  # This may be relative to your home directory
+  # if you run this script using cron.
+  #
+export MUSIC_DIR=wakeup
+
+  #
+  # Volume level to set before starting playing.
+  # Default: 40.
+  #
+export VOLUME_BEGIN=40
+  #
+  # Timeout to wait before next volume increase in 1 percent.
+  # Default: 5s (it's normal, check it out before adjusting).
+  #
+export TIMEOUT=5s
+
+#
+# WARNING: if there is non-latin text below and you use cron to run this script,
+# ensure that ``LC_ALL`` variable is set in your ``crontab -e``.
+#
+
+  # Passphrase you will need to enter to stop the music.
+export PASSPHRASE='Остановить музыку'
+  # Text to display in the passphrase entry dialog.
+export DIALOG_TEXT='Enter passphrase:'
+  #
+  # Text to display in the passphrase entry dialog
+  # after an unsuccessful attempt was made.
+  #
+export DIALOG_ERROR_TEXT='Passphrase is wrong. Please try again:'
+
+# --- Code --- #
+
+[ -d "${MUSIC_DIR}" -o -L "${MUSIC_DIR}" ] || (echo 'MUSIC_DIR "' "${MUSIC_DIR}" '"does not exist or is not of proper type"' >&2 && exit 1)
+
+VOL=$(amixer get PCM | grep 'Front Left:' | sed 's#.*\[\([0-9][0-9]*\)%\].*#\1#g')
+amixer set PCM 0% >/dev/null
+
+find -L "${MUSIC_DIR}" -iname '*.mp3' | \
+mpg123 -o alsa --loop '-1' --shuffle -@ '-' &
+
+for i in $(seq "${VOLUME_BEGIN}" 100)
+do
+  amixer set PCM ${i}% >/dev/null
+  sleep "${TIMEOUT}"
+done &
+
+INPUT=$(zenity --title 'wakeup' --text "${DIALOG_TEXT}" --entry)
+while test "${PASSPHRASE}" != "${INPUT}"
+do
+  INPUT=$(zenity --title 'wakeup' --text "${DIALOG_ERROR_TEXT}" --entry)
+done
+
+PID=$$
+kill $(ps h -o pid --ppid ${PID})
+
+  # Wait for 1 second to ensure mpg123 is killed before we restore volume level.
+sleep 1s
+amixer set PCM ${VOL} >/dev/null
