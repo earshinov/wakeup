@@ -60,8 +60,14 @@ do
   INPUT=$(zenity --title 'wakeup' --text "${DIALOG_ERROR_TEXT}" --entry)
 done
 
+  #
+  # Kill all child processes. Remember to filter out the ``ps`` process itself
+  # as it will be already finished when we run ``kill``,
+  # and ``kill`` will print an error.
+  #
 PID=$$
-kill $(ps h -o pid --ppid ${PID})
+PIDS=$(ps h -o pid,cmd --ppid ${PID})
+kill $(echo "${PIDS}" | awk '{ if ($2 != "ps") print $1; }')
 
   # Wait for 1 second to ensure mpg123 is killed before we restore volume level.
 sleep 1s
